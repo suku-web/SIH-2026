@@ -22,3 +22,10 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Python / Member 4
+.venv/
+__pycache__/
+*.pyc
+audio/enrollments.jsonapi.py.backup
+files (1).zip
