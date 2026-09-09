@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Logs
 logs
 *.log
@@ -29,3 +30,9 @@ __pycache__/
 *.pyc
 audio/enrollments.jsonapi.py.backup
 files (1).zip
+=======
+node_modules/
+.env
+voice-recordings/
+voice-security-frontend/dist/
+>>>>>>> 41d52f166be55dd06f3d0b09cc2cbb2e1abb2943

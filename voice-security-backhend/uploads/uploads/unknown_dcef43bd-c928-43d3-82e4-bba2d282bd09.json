@@ -1,0 +1,12 @@
+{
+  "recordingId": "unknown_dcef43bd-c928-43d3-82e4-bba2d282bd09",
+  "userId": "2",
+  "name": "er12",
+  "duration": "8",
+  "sampleRate": "browser-default",
+  "format": "audio/webm",
+  "fileName": "unknown_dcef43bd-c928-43d3-82e4-bba2d282bd09.webm",
+  "fileSize": 131358,
+  "timestamp": "2026-09-08T11:01:56.317Z",
+  "audioUrl": "/api/audio/unknown_dcef43bd-c928-43d3-82e4-bba2d282bd09.webm"
+}
