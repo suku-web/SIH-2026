@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Voice Clone Detection Dashboard</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', Arial, sans-serif;
+    background: #0f1117;
+    color: #e6e6e6;
+    padding: 24px;
+  }
+  h1 { font-size: 24px; margin-bottom: 4px; }
+  .subtitle { color: #9a9a9a; margin-bottom: 24px; font-size: 14px; }
+
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-bottom: 28px;
+  }
+  .stat-card {
+    background: #1a1d27;
+    border: 1px solid #2a2d3a;
+    border-radius: 10px;
+    padding: 16px;
+  }
+  .stat-card .label { font-size: 12px; color: #9a9a9a; }
+  .stat-card .value { font-size: 26px; font-weight: 700; margin-top: 6px; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    background: #1a1d27;
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  th, td {
+    padding: 12px 14px;
+    text-align: left;
+    font-size: 14px;
+    border-bottom: 1px solid #2a2d3a;
+  }
+  th {
+    background: #232634;
+    color: #b8b8b8;
+    font-weight: 600;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  tr:hover { background: #20232f; cursor: pointer; }
+
+  .badge {
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    display: inline-block;
+  }
+  .badge.low { background: #163d2b; color: #4ade80; }
+  .badge.medium { background: #4d3c0a; color: #fbbf24; }
+  .badge.high { background: #4d240a; color: #fb923c; }
+  .badge.critical { background: #4d0a12; color: #f87171; }
+
+  #status {
+    display: inline-block;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: #4ade80;
+    margin-right: 6px;
+  }
+</style>
+</head>
+<body>
+
+  <h1>🎙️ Voice Clone Detection Dashboard</h1>
+  <p class="subtitle"><span id="status"></span>Live monitoring — Member 6 backend</p>
+
+  <div class="stats" id="stats">
+    <div class="stat-card"><div class="label">Total Calls Today</div><div class="value" id="totalCalls">--</div></div>
+    <div class="stat-card"><div class="label">Fraud Detected</div><div class="value" id="fraudCount">--</div></div>
+    <div class="stat-card"><div class="label">Avg Risk Score</div><div class="value" id="avgRisk">--</div></div>
+    <div class="stat-card"><div class="label">Critical Alerts</div><div class="value" id="criticalCount">--</div></div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Call ID</th>
+        <th>Time</th>
+        <th>Risk Score</th>
+        <th>Risk Level</th>
+        <th>Decision</th>
+        <th>Action</th>
+      </tr>
+    </thead>
+    <tbody id="alertsBody">
+      <!-- rows injected by JS -->
+    </tbody>
+  </table>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
+<script>
+  const API_BASE = "http://localhost:5000"; // your backend URL
+
+  let allAlerts = []; // keep current data in memory
+
+  function badgeClass(level) {
+    return { Low: "low", Medium: "medium", High: "high", Critical: "critical" }[level] || "low";
+  }
+
+  function formatTime(isoString) {
+    const d = new Date(isoString);
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+
+  function renderAlerts(alerts) {
+    const tbody = document.getElementById("alertsBody");
+    tbody.innerHTML = "";
+
+    if (alerts.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; color:#666; padding:24px;">No alerts yet — POST some data from Thunder Client/Postman</td></tr>`;
+    }
+
+    alerts.forEach(a => {
+      const row = document.createElement("tr");
+      row.innerHTML = `
+        <td>${a.call_id}</td>
+        <td>${formatTime(a.timestamp)}</td>
+        <td>${a.risk_score}</td>
+        <td><span class="badge ${badgeClass(a.risk_level)}">${a.risk_level}</span></td>
+        <td>${a.decision}</td>
+        <td>${a.recommended_action}</td>
+      `;
+      tbody.appendChild(row);
+    });
+
+    // update stat cards
+    document.getElementById("totalCalls").textContent = alerts.length;
+    document.getElementById("fraudCount").textContent = alerts.filter(a => a.decision === "Fraudulent").length;
+    document.getElementById("criticalCount").textContent = alerts.filter(a => a.risk_level === "Critical").length;
+    const avg = alerts.length ? alerts.reduce((s, a) => s + a.risk_score, 0) / alerts.length : 0;
+    document.getElementById("avgRisk").textContent = avg.toFixed(0);
+  }
+
+  // ---- Step 1: Load existing alerts once when the page opens (normal fetch) ----
+  fetch(`${API_BASE}/api/alerts`)
+    .then(res => res.json())
+    .then(data => {
+      allAlerts = data;
+      renderAlerts(allAlerts);
+    })
+    .catch(err => console.error("Failed to load initial alerts:", err));
+
+  // ---- Step 2: Open a WebSocket connection for real-time updates ----
+  const socket = io(API_BASE);
+
+  socket.on('connect', () => {
+    console.log("✅ WebSocket connected to backend");
+    document.getElementById("status").style.background = "#4ade80"; // green
+  });
+
+  socket.on('disconnect', () => {
+    console.log("❌ WebSocket disconnected");
+    document.getElementById("status").style.background = "#f87171"; // red
+  });
+
+  // ---- Step 3: Whenever backend emits 'new_alert', add it instantly — no refresh needed ----
+  socket.on('new_alert', (newAlert) => {
+    console.log("🔔 New alert received in real-time:", newAlert);
+    allAlerts.unshift(newAlert); // add to the top of the list
+    renderAlerts(allAlerts);
+  });
+</script>
+
+</body>
+</html>
