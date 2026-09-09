@@ -1,6 +1,4 @@
 node_modules/
-voice-security-backend/uploads/
-voice-security-frontend/node_modules/
-voice-security-frontend/dist/
 .env
-.env.local
+voice-recordings/
+voice-security-frontend/dist/
