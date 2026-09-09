@@ -354,3 +354,12 @@ app.listen(
     console.log("");
   }
 );
+app.listen(PORT, "0.0.0.0", () => {
+  console.log("");
+  console.log("======================================");
+  console.log("VOICE SECURITY BACKEND");
+  console.log("======================================");
+  console.log(`Local: http://localhost:${PORT}`);
+  console.log(`Recordings folder: ${recordingsFolder}`);
+  console.log("======================================");
+});
