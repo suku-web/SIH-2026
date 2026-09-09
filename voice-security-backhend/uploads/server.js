@@ -4,48 +4,54 @@ const cors = require("cors");
 const path = require("path");
 const fs = require("fs");
 const crypto = require("crypto");
-<<<<<<< HEAD
-=======
-const { spawn } = require("child_process");
->>>>>>> origin/master
 
 const app = express();
 
 const PORT = 5000;
 
-// Shared recordings folder
-const recordingsFolder = path.join(
+// ==========================================
+// UPLOAD FOLDER
+// ==========================================
+
+const uploadFolder = path.join(
   __dirname,
-  "..",
-  "voice-recordings"
+  "uploads"
 );
 
-// Create folder if it doesn't exist
-if (!fs.existsSync(recordingsFolder)) {
-  fs.mkdirSync(recordingsFolder, {
+if (!fs.existsSync(uploadFolder)) {
+  fs.mkdirSync(uploadFolder, {
     recursive: true,
   });
 }
 
+// ==========================================
+// MIDDLEWARE
+// ==========================================
+
 app.use(cors());
+
 app.use(express.json());
 
-
-// -----------------------------
+// ==========================================
 // MULTER STORAGE
-// -----------------------------
+// ==========================================
 
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
-    cb(null, recordingsFolder);
+    cb(null, uploadFolder);
   },
 
   filename: function (req, file, cb) {
-    const id = crypto.randomUUID();
+    const userId = String(
+      req.body.userId || "unknown"
+    ).replace(/[^a-zA-Z0-9_-]/g, "_");
+
+    const recordingId =
+      crypto.randomUUID();
 
     cb(
       null,
-      `recording_${Date.now()}_${id}.webm`
+      `${userId}_${recordingId}.webm`
     );
   },
 });
@@ -58,22 +64,21 @@ const upload = multer({
   },
 });
 
-
-// -----------------------------
-// HOME
-// -----------------------------
+// ==========================================
+// TEST BACKEND
+// ==========================================
 
 app.get("/", (req, res) => {
   res.json({
     success: true,
-    message: "Voice Security Backend is running",
+    message:
+      "Voice Security Backend is running",
   });
 });
 
-
-// -----------------------------
-// SAVE ENROLLMENT
-// -----------------------------
+// ==========================================
+// VOICE ENROLLMENT
+// ==========================================
 
 app.post(
   "/api/enroll",
@@ -83,29 +88,39 @@ app.post(
       if (!req.file) {
         return res.status(400).json({
           success: false,
-          message: "No audio file received",
+          message:
+            "No audio file received",
         });
       }
 
       const recordingId =
-        path.parse(req.file.filename).name;
+        path.parse(
+          req.file.filename
+        ).name;
 
       const enrollment = {
         recordingId: recordingId,
 
-        name: req.body.name || "",
+        userId:
+          req.body.userId || "",
 
-        userId: req.body.userId || "",
+        name:
+          req.body.name || "",
 
-        duration: req.body.duration || "0",
+        duration:
+          req.body.duration || "",
 
-        mimeType:
-          req.body.mimeType ||
+        sampleRate:
+          req.body.sampleRate || "",
+
+        format:
           req.file.mimetype,
 
-        fileName: req.file.filename,
+        fileName:
+          req.file.filename,
 
-        fileSize: req.file.size,
+        fileSize:
+          req.file.size,
 
         timestamp:
           new Date().toISOString(),
@@ -114,18 +129,12 @@ app.post(
           `/api/audio/${encodeURIComponent(
             req.file.filename
           )}`,
-
-        downloadUrl:
-          `/api/download/${encodeURIComponent(
-            req.file.filename
-          )}`,
       };
 
-
-      // Save metadata
+      // Save enrollment metadata
       const metadataPath =
         path.join(
-          recordingsFolder,
+          uploadFolder,
           `${recordingId}.json`
         );
 
@@ -138,7 +147,7 @@ app.post(
         )
       );
 
-
+      // Show enrollment in terminal
       console.log("");
       console.log(
         "================================"
@@ -149,32 +158,13 @@ app.post(
       console.log(
         "================================"
       );
-      console.log(
-        "Name:",
-        enrollment.name
-      );
-      console.log(
-        "User ID:",
-        enrollment.userId
-      );
-      console.log(
-        "Duration:",
-        enrollment.duration,
-        "seconds"
-      );
-      console.log(
-        "File:",
-        enrollment.fileName
-      );
-      console.log(
-        "Folder:",
-        recordingsFolder
-      );
+
+      console.log(enrollment);
+
       console.log(
         "================================"
       );
       console.log("");
-
 
       res.json({
         success: true,
@@ -184,12 +174,12 @@ app.post(
 
         enrollment: enrollment,
       });
-
     } catch (error) {
       console.error(error);
 
       res.status(500).json({
         success: false,
+
         message:
           "Failed to save voice enrollment",
       });
@@ -197,10 +187,9 @@ app.post(
   }
 );
 
-
-// -----------------------------
+// ==========================================
 // GET ALL ENROLLMENTS
-// -----------------------------
+// ==========================================
 
 app.get(
   "/api/enrollments",
@@ -208,32 +197,31 @@ app.get(
     try {
       const files =
         fs.readdirSync(
-          recordingsFolder
+          uploadFolder
         );
 
-      const jsonFiles =
-        files.filter(
-          (file) =>
-            file.endsWith(".json")
+      const metadataFiles =
+        files.filter((file) =>
+          file.endsWith(".json")
         );
-
 
       const enrollments =
-        jsonFiles.map((file) => {
-          const filePath =
-            path.join(
-              recordingsFolder,
-              file
+        metadataFiles.map(
+          (file) => {
+            const filePath =
+              path.join(
+                uploadFolder,
+                file
+              );
+
+            return JSON.parse(
+              fs.readFileSync(
+                filePath,
+                "utf8"
+              )
             );
-
-          return JSON.parse(
-            fs.readFileSync(
-              filePath,
-              "utf8"
-            )
-          );
-        });
-
+          }
+        );
 
       res.json({
         success: true,
@@ -244,7 +232,6 @@ app.get(
         enrollments:
           enrollments,
       });
-
     } catch (error) {
       console.error(error);
 
@@ -258,10 +245,9 @@ app.get(
   }
 );
 
-
-// -----------------------------
-// PLAY AUDIO
-// -----------------------------
+// ==========================================
+// GET AUDIO FILE
+// ==========================================
 
 app.get(
   "/api/audio/:filename",
@@ -273,101 +259,57 @@ app.get(
 
     const filePath =
       path.join(
-        recordingsFolder,
+        uploadFolder,
         filename
       );
-
 
     if (!fs.existsSync(filePath)) {
       return res.status(404).json({
         success: false,
+
         message:
           "Audio recording not found",
       });
     }
-
 
     res.sendFile(filePath);
   }
 );
 
-
-// -----------------------------
-// DOWNLOAD AUDIO
-// -----------------------------
-
-app.get(
-  "/api/download/:filename",
-  (req, res) => {
-    const filename =
-      path.basename(
-        req.params.filename
-      );
-
-    const filePath =
-      path.join(
-        recordingsFolder,
-        filename
-      );
-
-
-    if (!fs.existsSync(filePath)) {
-      return res.status(404).json({
-        success: false,
-        message:
-          "Audio recording not found",
-      });
-    }
-
-
-    res.download(
-      filePath,
-      filename
-    );
-  }
-);
-
-
-// -----------------------------
+// ==========================================
 // START SERVER
-// -----------------------------
+// ==========================================
 
 app.listen(
   PORT,
   "0.0.0.0",
   () => {
     console.log("");
+
     console.log(
       "======================================"
     );
+
     console.log(
       "VOICE SECURITY BACKEND"
     );
+
     console.log(
       "======================================"
     );
+
     console.log(
       `Local: http://localhost:${PORT}`
     );
+
     console.log(
-      `Recordings folder: ${recordingsFolder}`
+      `Recordings: ${uploadFolder}`
     );
+
     console.log(
       "======================================"
     );
+
     console.log("");
   }
-<<<<<<< HEAD
 );
-app.listen(PORT, "0.0.0.0", () => {
-  console.log("");
-  console.log("======================================");
-  console.log("VOICE SECURITY BACKEND");
-  console.log("======================================");
-  console.log(`Local: http://localhost:${PORT}`);
-  console.log(`Recordings folder: ${recordingsFolder}`);
-  console.log("======================================");
-});
-=======
-);
->>>>>>> origin/master
