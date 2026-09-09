@@ -1,6 +1,17 @@
-<<<<<<< HEAD
+# Environment & Secrets
+.env
+
+# Dependencies
+node_modules/
+
+# Build & Outputs
+dist/
+dist-ssr/
+voice-security-frontend/dist/
+*.local
+
 # Logs
-logs
+logs/
 *.log
 npm-debug.log*
 yarn-debug.log*
@@ -8,15 +19,10 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
-*.local
-
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
-.idea
+.idea/
 .DS_Store
 *.suo
 *.ntvs*
@@ -24,15 +30,12 @@ dist-ssr
 *.sln
 *.sw?
 
-# Python / Member 4
+# Python / Microservices
 .venv/
 __pycache__/
 *.pyc
-audio/enrollments.jsonapi.py.backup
-files (1).zip
-=======
-node_modules/
-.env
+audio/
 voice-recordings/
-voice-security-frontend/dist/
->>>>>>> 41d52f166be55dd06f3d0b09cc2cbb2e1abb2943
+enrollments.json
+api.py.backup
+files (1).zip
