@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const API = "http://localhost:5000";
 
@@ -6,135 +6,155 @@ function App() {
   const [name, setName] = useState("");
   const [userId, setUserId] = useState("");
 
-  const [recording, setRecording] = useState(false);
-  const [message, setMessage] = useState("");
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingTime, setRecordingTime] = useState(0);
 
   const [audioUrl, setAudioUrl] = useState("");
-  const [audioBlob, setAudioBlob] = useState(null);
+  const [savedRecordings, setSavedRecordings] = useState([]);
 
-  const [enrollments, setEnrollments] = useState([]);
+  const [message, setMessage] = useState("");
 
   const recorderRef = useRef(null);
   const streamRef = useRef(null);
   const chunksRef = useRef([]);
+  const timerRef = useRef(null);
   const startTimeRef = useRef(0);
 
-  // ==========================================
-  // START RECORDING
-  // ==========================================
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+      }
+
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((track) => {
+          track.stop();
+        });
+      }
+    };
+  }, []);
+
+  function formatTime(seconds) {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+
+    return `${String(mins).padStart(2, "0")}:${String(
+      secs
+    ).padStart(2, "0")}`;
+  }
 
   async function startRecording() {
     if (!name.trim() || !userId.trim()) {
-      setMessage(
-        "⚠️ Please enter Name and User ID first."
-      );
+      setMessage("Please enter Name and User ID first.");
       return;
     }
 
     try {
-      const stream =
-        await navigator.mediaDevices.getUserMedia({
-          audio: true,
-        });
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: true,
+      });
 
       streamRef.current = stream;
       chunksRef.current = [];
-      startTimeRef.current = Date.now();
 
-      const recorder =
-        new MediaRecorder(stream);
+      let mimeType = "audio/webm";
+
+      if (
+        MediaRecorder.isTypeSupported(
+          "audio/webm;codecs=opus"
+        )
+      ) {
+        mimeType = "audio/webm;codecs=opus";
+      }
+
+      const recorder = new MediaRecorder(stream, {
+        mimeType,
+      });
 
       recorderRef.current = recorder;
 
       recorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
+        if (event.data && event.data.size > 0) {
           chunksRef.current.push(event.data);
         }
       };
 
-      recorder.onstop = async () => {
-        const blob = new Blob(
-          chunksRef.current,
-          {
-            type: "audio/webm",
-          }
-        );
+      recorder.onstart = () => {
+        setIsRecording(true);
+        setRecordingTime(0);
+        setMessage("🔴 Recording live... Speak now.");
 
-        const url =
-          URL.createObjectURL(blob);
+        startTimeRef.current = Date.now();
 
-        setAudioUrl(url);
-        setAudioBlob(blob);
+        timerRef.current = setInterval(() => {
+          const elapsed = Math.floor(
+            (Date.now() - startTimeRef.current) / 1000
+          );
 
-        stream
-          .getTracks()
-          .forEach((track) => {
-            track.stop();
-          });
-
-        const duration = Math.round(
-          (Date.now() -
-            startTimeRef.current) /
-            1000
-        );
-
-        setMessage(
-          "⏳ Uploading recording..."
-        );
-
-        await uploadVoice(
-          blob,
-          duration
-        );
+          setRecordingTime(elapsed);
+        }, 250);
       };
 
-      recorder.start();
+      recorder.onstop = async () => {
+        if (timerRef.current) {
+          clearInterval(timerRef.current);
+          timerRef.current = null;
+        }
 
-      setRecording(true);
+        const blob = new Blob(chunksRef.current, {
+          type: mimeType,
+        });
 
-      setMessage(
-        "🔴 Recording live... Speak now."
-      );
+        if (blob.size === 0) {
+          setMessage("❌ Recording is empty. Please try again.");
+          return;
+        }
+
+        const localUrl = URL.createObjectURL(blob);
+        setAudioUrl(localUrl);
+
+        const duration = Math.max(
+          1,
+          Math.round(
+            (Date.now() - startTimeRef.current) / 1000
+          )
+        );
+
+        if (streamRef.current) {
+          streamRef.current
+            .getTracks()
+            .forEach((track) => track.stop());
+        }
+
+        setIsRecording(false);
+        setMessage("⏳ Uploading recording...");
+
+        await uploadRecording(blob, duration, mimeType);
+      };
+
+      recorder.start(250);
+
     } catch (error) {
       console.error(error);
-
       setMessage(
-        "❌ Microphone permission failed."
+        "❌ Microphone access failed. Allow microphone permission and try again."
       );
     }
   }
-
-  // ==========================================
-  // STOP RECORDING
-  // ==========================================
 
   function stopRecording() {
     if (
       recorderRef.current &&
-      recorderRef.current.state !==
-        "inactive"
+      recorderRef.current.state !== "inactive"
     ) {
       recorderRef.current.stop();
+      setMessage("⏳ Finishing recording...");
     }
-
-    setRecording(false);
-
-    setMessage(
-      "⏳ Processing recording..."
-    );
   }
 
-  // ==========================================
-  // UPLOAD VOICE TO BACKEND
-  // ==========================================
-
-  async function uploadVoice(
-    blob,
-    duration
-  ) {
+  async function uploadRecording(blob, duration, mimeType) {
     try {
-      const formData =
-        new FormData();
+      const formData = new FormData();
 
       formData.append(
         "audio",
@@ -142,91 +162,55 @@ function App() {
         "voice-recording.webm"
       );
 
-      formData.append(
-        "name",
-        name
-      );
+      formData.append("name", name);
+      formData.append("userId", userId);
+      formData.append("duration", duration);
+      formData.append("mimeType", mimeType);
 
-      formData.append(
-        "userId",
-        userId
-      );
-
-      formData.append(
-        "duration",
-        duration
-      );
-
-      formData.append(
-        "sampleRate",
-        "browser-default"
-      );
-
-      console.log(
-        "Uploading recording..."
-      );
-
-      const response =
-        await fetch(
-          `${API}/api/enroll`,
-          {
-            method: "POST",
-            body: formData,
-          }
-        );
-
-      const data =
-        await response.json();
-
-      console.log(
-        "Backend response:",
-        data
+      const response = await fetch(
+        `${API}/api/enroll`,
+        {
+          method: "POST",
+          body: formData,
+        }
       );
 
       if (!response.ok) {
-        throw new Error(
-          data.message ||
-            "Upload failed"
-        );
+        const errorText = await response.text();
+        throw new Error(errorText);
       }
+
+      const data = await response.json();
+
+      console.log("Server response:", data);
 
       setMessage(
         "✅ Voice enrollment saved successfully!"
       );
 
-      await loadEnrollments();
+      loadEnrollments();
+
     } catch (error) {
-      console.error(error);
+      console.error("Upload error:", error);
 
       setMessage(
-        "❌ Upload failed: " +
-          error.message
+        "❌ Upload failed. Make sure the backend is running."
       );
     }
   }
 
-  // ==========================================
-  // LOAD ENROLLMENTS
-  // ==========================================
-
   async function loadEnrollments() {
     try {
-      const response =
-        await fetch(
-          `${API}/api/enrollments`
-        );
-
-      const data =
-        await response.json();
-
-      console.log(
-        "Enrollments:",
-        data
+      const response = await fetch(
+        `${API}/api/enrollments`
       );
 
-      setEnrollments(
+      const data = await response.json();
+
+      setSavedRecordings(
         data.enrollments || []
       );
+
     } catch (error) {
       console.error(error);
 
@@ -236,290 +220,263 @@ function App() {
     }
   }
 
-  // ==========================================
-  // DOWNLOAD LATEST RECORDING
-  // ==========================================
-
-  function downloadLatest() {
-    if (!audioBlob) {
-      return;
-    }
-
-    const url =
-      URL.createObjectURL(
-        audioBlob
-      );
-
-    const link =
-      document.createElement("a");
-
-    link.href = url;
-
-    link.download =
-      `${userId}-voice-recording.webm`;
-
-    document.body.appendChild(
-      link
-    );
-
-    link.click();
-
-    document.body.removeChild(
-      link
-    );
-
-    URL.revokeObjectURL(url);
-  }
-
-  // ==========================================
-  // UI
-  // ==========================================
-
   return (
     <div
       style={{
-        maxWidth: "1000px",
-        margin: "40px auto",
-        padding: "30px",
-        fontFamily:
-          "Arial, sans-serif",
+        minHeight: "100vh",
+        background: "#111827",
+        color: "white",
+        padding: "40px 20px",
+        fontFamily: "Arial, sans-serif",
       }}
     >
-      <h1>
-        🎤 Voice Security
-        Enrollment
-      </h1>
-
-      <p>
-        Capture and securely save
-        a voice recording.
-      </p>
-
-      <hr />
-
-      {/* USER DETAILS */}
-
-      <h2>
-        👤 User Details
-      </h2>
-
-      <input
-        type="text"
-        placeholder="Enter Name"
-        value={name}
-        disabled={recording}
-        onChange={(e) =>
-          setName(e.target.value)
-        }
+      <div
         style={{
-          padding: "12px",
-          width: "220px",
-          marginRight: "10px",
+          maxWidth: "1000px",
+          margin: "auto",
+          background: "#1f2937",
+          padding: "35px",
+          borderRadius: "15px",
         }}
-      />
+      >
+        <h1 style={{ textAlign: "center" }}>
+          🎤 Voice Security Enrollment
+        </h1>
 
-      <input
-        type="text"
-        placeholder="Enter User ID"
-        value={userId}
-        disabled={recording}
-        onChange={(e) =>
-          setUserId(e.target.value)
-        }
-        style={{
-          padding: "12px",
-          width: "220px",
-        }}
-      />
+        <p style={{ textAlign: "center" }}>
+          Capture, save and share voice enrollment recordings.
+        </p>
 
-      <br />
-      <br />
+        <hr />
 
-      {/* RECORD BUTTON */}
+        <h2>👤 User Details</h2>
 
-      {!recording ? (
-        <button
-          onClick={startRecording}
+        <div
           style={{
-            padding:
-              "14px 25px",
-            fontSize: "16px",
-            cursor: "pointer",
+            display: "flex",
+            gap: "15px",
+            flexWrap: "wrap",
           }}
         >
-          🎤 START RECORDING
-        </button>
-      ) : (
-        <button
-          onClick={stopRecording}
-          style={{
-            padding:
-              "14px 25px",
-            fontSize: "16px",
-            cursor: "pointer",
-          }}
-        >
-          ⏹ STOP RECORDING
-        </button>
-      )}
-
-      <h3>
-        {message}
-      </h3>
-
-      <hr />
-
-      {/* LATEST RECORDING */}
-
-      {audioUrl && (
-        <div>
-          <h2>
-            🎧 Latest Recording
-          </h2>
-
-          <audio
-            controls
-            src={audioUrl}
+          <input
+            type="text"
+            placeholder="Enter Name"
+            value={name}
+            disabled={isRecording}
+            onChange={(e) => setName(e.target.value)}
             style={{
-              width: "500px",
-              maxWidth: "100%",
+              padding: "14px",
+              fontSize: "16px",
+              flex: 1,
             }}
           />
 
-          <br />
-          <br />
-
-          <button
-            onClick={downloadLatest}
+          <input
+            type="text"
+            placeholder="Enter User ID"
+            value={userId}
+            disabled={isRecording}
+            onChange={(e) => setUserId(e.target.value)}
             style={{
-              padding:
-                "12px 20px",
+              padding: "14px",
+              fontSize: "16px",
+              flex: 1,
+            }}
+          />
+        </div>
+
+        <br />
+
+        <div style={{ textAlign: "center" }}>
+          {!isRecording ? (
+            <button
+              onClick={startRecording}
+              style={{
+                padding: "15px 30px",
+                fontSize: "18px",
+                cursor: "pointer",
+              }}
+            >
+              🎤 START RECORDING
+            </button>
+          ) : (
+            <button
+              onClick={stopRecording}
+              style={{
+                padding: "15px 30px",
+                fontSize: "18px",
+                cursor: "pointer",
+              }}
+            >
+              ⏹️ STOP RECORDING
+            </button>
+          )}
+        </div>
+
+        {isRecording && (
+          <div
+            style={{
+              textAlign: "center",
+              marginTop: "20px",
+            }}
+          >
+            <h2 style={{ color: "#ef4444" }}>
+              🔴 LIVE RECORDING
+            </h2>
+
+            <div
+              style={{
+                fontSize: "40px",
+                fontWeight: "bold",
+              }}
+            >
+              {formatTime(recordingTime)}
+            </div>
+
+            <p>Speak clearly into the microphone...</p>
+          </div>
+        )}
+
+        <h3
+          style={{
+            textAlign: "center",
+            marginTop: "20px",
+          }}
+        >
+          {message}
+        </h3>
+
+        {audioUrl && (
+          <div
+            style={{
+              marginTop: "30px",
+              padding: "20px",
+              background: "#111827",
+              borderRadius: "10px",
+            }}
+          >
+            <h2>🎧 Latest Recording</h2>
+
+            <audio
+              controls
+              src={audioUrl}
+              style={{ width: "100%" }}
+            />
+
+            <br />
+
+            <a
+              href={audioUrl}
+              download="voice-recording.webm"
+              style={{
+                display: "inline-block",
+                padding: "12px 20px",
+                background: "#374151",
+                color: "white",
+                textDecoration: "none",
+                borderRadius: "6px",
+              }}
+            >
+              📥 Download Recording
+            </a>
+          </div>
+        )}
+
+        <hr style={{ margin: "35px 0" }} />
+
+        <div style={{ textAlign: "center" }}>
+          <button
+            onClick={loadEnrollments}
+            style={{
+              padding: "12px 25px",
               fontSize: "16px",
               cursor: "pointer",
             }}
           >
-            ⬇️ DOWNLOAD RECORDING
+            📋 VIEW ENROLLMENTS
           </button>
         </div>
-      )}
 
-      <hr />
+        <h2>📋 Saved Voice Enrollments</h2>
 
-      {/* ENROLLMENTS */}
-
-      <h2>
-        📋 Voice Enrollments
-      </h2>
-
-      <button
-        onClick={loadEnrollments}
-        style={{
-          padding:
-            "12px 20px",
-          fontSize: "16px",
-          cursor: "pointer",
-        }}
-      >
-        🔄 VIEW SAVED ENROLLMENTS
-      </button>
-
-      <br />
-      <br />
-
-      {enrollments.length === 0 ? (
-        <p>
-          No enrollments loaded.
-        </p>
-      ) : (
-        <table
-          border="1"
-          cellPadding="10"
-          style={{
-            width: "100%",
-            borderCollapse:
-              "collapse",
-          }}
-        >
-          <thead>
-            <tr>
-              <th>
-                Enrollment
-              </th>
-
-              <th>
-                Name
-              </th>
-
-              <th>
-                User ID
-              </th>
-
-              <th>
-                Duration
-              </th>
-
-              <th>
-                Audio
-              </th>
-
-              <th>
-                Download
-              </th>
-            </tr>
-          </thead>
-
-          <tbody>
-            {enrollments.map(
-              (item, index) => (
-                <tr
-                  key={
-                    item.recordingId
-                  }
-                >
-                  <td>
-                    {index + 1}
-                  </td>
-
-                  <td>
-                    {item.name}
-                  </td>
-
-                  <td>
-                    {item.userId}
-                  </td>
-
-                  <td>
-                    {item.duration}{" "}
-                    sec
-                  </td>
-
-                  <td>
-                    <audio
-                      controls
-                      src={`${API}${item.audioUrl}`}
-                      style={{
-                        width:
-                          "250px",
-                      }}
-                    />
-                  </td>
-
-                  <td>
-                    <a
-                      href={`${API}${item.audioUrl}`}
-                      download
-                    >
-                      <button>
-                        ⬇️ Download
-                      </button>
-                    </a>
-                  </td>
+        {savedRecordings.length === 0 ? (
+          <p>No enrollments loaded yet.</p>
+        ) : (
+          <div style={{ overflowX: "auto" }}>
+            <table
+              style={{
+                width: "100%",
+                borderCollapse: "collapse",
+              }}
+            >
+              <thead>
+                <tr>
+                  <th style={{ padding: "10px" }}>
+                    #
+                  </th>
+                  <th style={{ padding: "10px" }}>
+                    Name
+                  </th>
+                  <th style={{ padding: "10px" }}>
+                    User ID
+                  </th>
+                  <th style={{ padding: "10px" }}>
+                    Duration
+                  </th>
+                  <th style={{ padding: "10px" }}>
+                    Audio
+                  </th>
+                  <th style={{ padding: "10px" }}>
+                    Download
+                  </th>
                 </tr>
-              )
-            )}
-          </tbody>
-        </table>
-      )}
+              </thead>
+
+              <tbody>
+                {savedRecordings.map(
+                  (recording, index) => (
+                    <tr key={recording.recordingId}>
+                      <td style={{ padding: "10px" }}>
+                        {index + 1}
+                      </td>
+
+                      <td style={{ padding: "10px" }}>
+                        {recording.name}
+                      </td>
+
+                      <td style={{ padding: "10px" }}>
+                        {recording.userId}
+                      </td>
+
+                      <td style={{ padding: "10px" }}>
+                        {recording.duration} sec
+                      </td>
+
+                      <td style={{ padding: "10px" }}>
+                        <audio
+                          controls
+                          src={`${API}${recording.audioUrl}`}
+                        />
+                      </td>
+
+                      <td style={{ padding: "10px" }}>
+                        <a
+                          href={`${API}${recording.downloadUrl}`}
+                          style={{
+                            color: "white",
+                          }}
+                        >
+                          📥 Download
+                        </a>
+                      </td>
+                    </tr>
+                  )
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

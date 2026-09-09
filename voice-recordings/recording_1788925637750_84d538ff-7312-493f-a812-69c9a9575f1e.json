@@ -1,0 +1,12 @@
+{
+  "recordingId": "recording_1788925637750_84d538ff-7312-493f-a812-69c9a9575f1e",
+  "name": "palak",
+  "userId": "1",
+  "duration": "10",
+  "mimeType": "audio/webm;codecs=opus",
+  "fileName": "recording_1788925637750_84d538ff-7312-493f-a812-69c9a9575f1e.webm",
+  "fileSize": 159749,
+  "timestamp": "2026-09-09T03:47:17.766Z",
+  "audioUrl": "/api/audio/recording_1788925637750_84d538ff-7312-493f-a812-69c9a9575f1e.webm",
+  "downloadUrl": "/api/download/recording_1788925637750_84d538ff-7312-493f-a812-69c9a9575f1e.webm"
+}

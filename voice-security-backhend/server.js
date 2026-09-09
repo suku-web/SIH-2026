@@ -9,43 +9,39 @@ const app = express();
 
 const PORT = 5000;
 
-// ==========================================
-// UPLOAD FOLDER
-// ==========================================
-
-const uploadFolder = path.join(
+// Shared recordings folder
+const recordingsFolder = path.join(
   __dirname,
-  "uploads"
+  "..",
+  "voice-recordings"
 );
 
-if (!fs.existsSync(uploadFolder)) {
-  fs.mkdirSync(uploadFolder, {
+// Create folder if it doesn't exist
+if (!fs.existsSync(recordingsFolder)) {
+  fs.mkdirSync(recordingsFolder, {
     recursive: true,
   });
 }
 
-// ==========================================
-// MIDDLEWARE
-// ==========================================
-
 app.use(cors());
 app.use(express.json());
 
-// ==========================================
+
+// -----------------------------
 // MULTER STORAGE
-// ==========================================
+// -----------------------------
 
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
-    cb(null, uploadFolder);
+    cb(null, recordingsFolder);
   },
 
   filename: function (req, file, cb) {
-    const recordingId = crypto.randomUUID();
+    const id = crypto.randomUUID();
 
     cb(
       null,
-      `voice_${recordingId}.webm`
+      `recording_${Date.now()}_${id}.webm`
     );
   },
 });
@@ -58,9 +54,10 @@ const upload = multer({
   },
 });
 
-// ==========================================
-// TEST BACKEND
-// ==========================================
+
+// -----------------------------
+// HOME
+// -----------------------------
 
 app.get("/", (req, res) => {
   res.json({
@@ -69,9 +66,10 @@ app.get("/", (req, res) => {
   });
 });
 
-// ==========================================
-// VOICE ENROLLMENT
-// ==========================================
+
+// -----------------------------
+// SAVE ENROLLMENT
+// -----------------------------
 
 app.post(
   "/api/enroll",
@@ -88,11 +86,6 @@ app.post(
       const recordingId =
         path.parse(req.file.filename).name;
 
-      // Actual recording time sent by frontend
-      const recordedAt =
-        req.body.recordedAt ||
-        new Date().toISOString();
-
       const enrollment = {
         recordingId: recordingId,
 
@@ -100,33 +93,35 @@ app.post(
 
         userId: req.body.userId || "",
 
-        duration: req.body.duration || "",
+        duration: req.body.duration || "0",
 
-        recordedAt: recordedAt,
-
-        sampleRate:
-          req.body.sampleRate ||
-          "browser-default",
-
-        format: req.file.mimetype,
+        mimeType:
+          req.body.mimeType ||
+          req.file.mimetype,
 
         fileName: req.file.filename,
 
         fileSize: req.file.size,
 
+        timestamp:
+          new Date().toISOString(),
+
         audioUrl:
           `/api/audio/${encodeURIComponent(
             req.file.filename
           )}`,
+
+        downloadUrl:
+          `/api/download/${encodeURIComponent(
+            req.file.filename
+          )}`,
       };
 
-      // ======================================
-      // SAVE ENROLLMENT JSON
-      // ======================================
 
+      // Save metadata
       const metadataPath =
         path.join(
-          uploadFolder,
+          recordingsFolder,
           `${recordingId}.json`
         );
 
@@ -139,55 +134,43 @@ app.post(
         )
       );
 
-      // ======================================
-      // TERMINAL OUTPUT
-      // ======================================
 
       console.log("");
       console.log(
-        "======================================"
+        "================================"
       );
       console.log(
         "VOICE ENROLLMENT SAVED"
       );
       console.log(
-        "======================================"
+        "================================"
       );
-
       console.log(
         "Name:",
         enrollment.name
       );
-
       console.log(
         "User ID:",
         enrollment.userId
       );
-
-      console.log(
-        "Recording Time:",
-        enrollment.recordedAt
-      );
-
       console.log(
         "Duration:",
         enrollment.duration,
         "seconds"
       );
-
       console.log(
-        "Audio File:",
+        "File:",
         enrollment.fileName
       );
-
       console.log(
-        "======================================"
+        "Folder:",
+        recordingsFolder
+      );
+      console.log(
+        "================================"
       );
       console.log("");
 
-      // ======================================
-      // SEND RESPONSE
-      // ======================================
 
       res.json({
         success: true,
@@ -197,12 +180,12 @@ app.post(
 
         enrollment: enrollment,
       });
+
     } catch (error) {
       console.error(error);
 
       res.status(500).json({
         success: false,
-
         message:
           "Failed to save voice enrollment",
       });
@@ -210,27 +193,32 @@ app.post(
   }
 );
 
-// ==========================================
+
+// -----------------------------
 // GET ALL ENROLLMENTS
-// ==========================================
+// -----------------------------
 
 app.get(
   "/api/enrollments",
   (req, res) => {
     try {
       const files =
-        fs.readdirSync(uploadFolder);
-
-      const metadataFiles =
-        files.filter((file) =>
-          file.endsWith(".json")
+        fs.readdirSync(
+          recordingsFolder
         );
 
+      const jsonFiles =
+        files.filter(
+          (file) =>
+            file.endsWith(".json")
+        );
+
+
       const enrollments =
-        metadataFiles.map((file) => {
+        jsonFiles.map((file) => {
           const filePath =
             path.join(
-              uploadFolder,
+              recordingsFolder,
               file
             );
 
@@ -242,12 +230,6 @@ app.get(
           );
         });
 
-      // Newest first
-      enrollments.sort(
-        (a, b) =>
-          new Date(b.recordedAt) -
-          new Date(a.recordedAt)
-      );
 
       res.json({
         success: true,
@@ -258,6 +240,7 @@ app.get(
         enrollments:
           enrollments,
       });
+
     } catch (error) {
       console.error(error);
 
@@ -271,9 +254,10 @@ app.get(
   }
 );
 
-// ==========================================
-// GET AUDIO FILE
-// ==========================================
+
+// -----------------------------
+// PLAY AUDIO
+// -----------------------------
 
 app.get(
   "/api/audio/:filename",
@@ -285,57 +269,88 @@ app.get(
 
     const filePath =
       path.join(
-        uploadFolder,
+        recordingsFolder,
         filename
       );
+
 
     if (!fs.existsSync(filePath)) {
       return res.status(404).json({
         success: false,
-
         message:
           "Audio recording not found",
       });
     }
 
+
     res.sendFile(filePath);
   }
 );
 
-// ==========================================
+
+// -----------------------------
+// DOWNLOAD AUDIO
+// -----------------------------
+
+app.get(
+  "/api/download/:filename",
+  (req, res) => {
+    const filename =
+      path.basename(
+        req.params.filename
+      );
+
+    const filePath =
+      path.join(
+        recordingsFolder,
+        filename
+      );
+
+
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({
+        success: false,
+        message:
+          "Audio recording not found",
+      });
+    }
+
+
+    res.download(
+      filePath,
+      filename
+    );
+  }
+);
+
+
+// -----------------------------
 // START SERVER
-// ==========================================
+// -----------------------------
 
 app.listen(
   PORT,
   "0.0.0.0",
   () => {
     console.log("");
-
     console.log(
       "======================================"
     );
-
     console.log(
       "VOICE SECURITY BACKEND"
     );
-
     console.log(
       "======================================"
     );
-
     console.log(
       `Local: http://localhost:${PORT}`
     );
-
     console.log(
-      `Recordings: ${uploadFolder}`
+      `Recordings folder: ${recordingsFolder}`
     );
-
     console.log(
       "======================================"
     );
-
     console.log("");
   }
 );
