@@ -1,0 +1,12 @@
+{
+  "recordingId": "unknown_ae9529da-d105-4d4e-aef7-6315dcdf715e",
+  "userId": "1",
+  "name": "xyz",
+  "duration": "11",
+  "sampleRate": "browser-default",
+  "format": "audio/webm",
+  "fileName": "unknown_ae9529da-d105-4d4e-aef7-6315dcdf715e.webm",
+  "fileSize": 176760,
+  "timestamp": "2026-09-08T11:00:45.409Z",
+  "audioUrl": "/api/audio/unknown_ae9529da-d105-4d4e-aef7-6315dcdf715e.webm"
+}

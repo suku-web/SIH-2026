@@ -1,0 +1,12 @@
+{
+  "recordingId": "voice_19c01bf0-2ee0-447c-a65d-714da3f0ef35",
+  "name": "xyz",
+  "userId": "1",
+  "duration": "20",
+  "recordedAt": "2026-09-08T10:33:16.775Z",
+  "sampleRate": "browser-default",
+  "format": "audio/webm",
+  "fileName": "voice_19c01bf0-2ee0-447c-a65d-714da3f0ef35.webm",
+  "fileSize": 326490,
+  "audioUrl": "/api/audio/voice_19c01bf0-2ee0-447c-a65d-714da3f0ef35.webm"
+}
