@@ -4,10 +4,7 @@ const cors = require("cors");
 const path = require("path");
 const fs = require("fs");
 const crypto = require("crypto");
-<<<<<<< HEAD
-=======
 const { spawn } = require("child_process");
->>>>>>> origin/master
 
 const app = express();
 
@@ -357,17 +354,4 @@ app.listen(
     );
     console.log("");
   }
-<<<<<<< HEAD
 );
-app.listen(PORT, "0.0.0.0", () => {
-  console.log("");
-  console.log("======================================");
-  console.log("VOICE SECURITY BACKEND");
-  console.log("======================================");
-  console.log(`Local: http://localhost:${PORT}`);
-  console.log(`Recordings folder: ${recordingsFolder}`);
-  console.log("======================================");
-});
-=======
-);
->>>>>>> origin/master
